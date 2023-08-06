@@ -45,7 +45,7 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 import pickle
 
-store = FAISS.from_texts(docs, OpenAIEmbeddings(), metadatas=metadatas)
+store = FAISS.from_texts(docs, OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"]), metadatas=metadatas)
 with open("faiss_store.pkl", "wb") as f:
     pickle.dump(store, f)
 
