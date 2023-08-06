@@ -1,3 +1,2 @@
 langchain
 streamlit
-pickle
