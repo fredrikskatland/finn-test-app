@@ -7,6 +7,50 @@ import streamlit as st
 import pickle
 from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
 
+from bs4 import BeautifulSoup
+import requests
+
+def extract_text_from(url):
+    html = requests.get(url).text
+    soup = BeautifulSoup(html, features="html.parser")
+    text = soup.get_text()
+
+    lines = (line.strip() for line in text.splitlines())
+    return '\n'.join(line for line in lines if line)
+
+import xmltodict
+
+r = requests.get("https://www.finn.no/feed/job/atom.xml?rows=200")
+xml = r.text
+raw = xmltodict.parse(xml)
+
+pages = []
+for info in raw['feed']['entry']:
+    url = info['link']['@href']
+    if 'https://www.finn.no/' in url:
+        pages.append({'text': extract_text_from(url), 'source': url})
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000)
+docs, metadatas = [], []
+for page in pages:
+    splits = text_splitter.split_text(page['text'])
+    docs.extend(splits)
+    metadatas.extend([{"source": page['source']}] * len(splits))
+    print(f"Split {page['source']} into {len(splits)} chunks")
+
+import faiss
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings
+import pickle
+
+store = FAISS.from_texts(docs, OpenAIEmbeddings(), metadatas=metadatas)
+with open("faiss_store.pkl", "wb") as f:
+    pickle.dump(store, f)
+
+
+
 st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
 st.title("🦜 LangChain: Søk med chat.")
 
