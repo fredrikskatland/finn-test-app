@@ -3,7 +3,6 @@ from langchain.callbacks import StreamlitCallbackHandler
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.chat_message_histories import StreamlitChatMessageHistory
-from langchain.tools import DuckDuckGoSearchRun
 import streamlit as st
 import pickle
 from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
@@ -53,7 +52,7 @@ if prompt := st.chat_input(placeholder="Jeg leter etterlederstillinger."):
     st.chat_message("user").write(prompt)
 
 
-    llm = llm = ChatOpenAI(temperature = 0)
+    llm = llm = ChatOpenAI(temperature = 0, openai_api_key=st.secrets["openai_api_key"])
     tools = [tool]
     agent = create_conversational_retrieval_agent(llm, tools, verbose=True)
     with st.chat_message("assistant"):
