@@ -8,7 +8,7 @@ import pickle
 from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
 
 st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
-st.title("🦜 LangChain: Søk med chat.")
+st.title("🦜 LangChain: Søk på Finn med chat.")
 
 import pinecone
 from langchain.vectorstores import Pinecone
@@ -41,7 +41,7 @@ memory = ConversationBufferMemory(
 )
 if len(msgs.messages) == 0 or st.sidebar.button("Reset chat history"):
     msgs.clear()
-    msgs.add_ai_message("How can I help you?")
+    msgs.add_ai_message("Her kan du søke etter stillinger på finn.no.")
     st.session_state.steps = {}
 
 avatars = {"human": "user", "ai": "assistant"}
@@ -56,7 +56,7 @@ for idx, msg in enumerate(msgs.messages):
                 st.write(f"**{step[1]}**")
         st.write(msg.content)
 
-if prompt := st.chat_input(placeholder="Jeg leter etterlederstillinger."):
+if prompt := st.chat_input(placeholder="Jeg leter etterlederstillinger innen bank og finans."):
     st.chat_message("user").write(prompt)
 
 
