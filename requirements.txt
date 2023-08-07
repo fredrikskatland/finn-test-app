@@ -5,3 +5,4 @@ faiss-cpu==1.7.4
 tiktoken==0.3.3
 xmltodict==0.13.0
 bs4
+pinecone-client

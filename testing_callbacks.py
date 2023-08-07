@@ -1,75 +1,40 @@
-from langchain.agents import ConversationalChatAgent, AgentExecutor
 from langchain.callbacks import StreamlitCallbackHandler
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.chat_message_histories import StreamlitChatMessageHistory
 import streamlit as st
-import pickle
-from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
-
-from bs4 import BeautifulSoup
-import requests
-
-def extract_text_from(url):
-    html = requests.get(url).text
-    soup = BeautifulSoup(html, features="html.parser")
-    text = soup.get_text()
-
-    lines = (line.strip() for line in text.splitlines())
-    return '\n'.join(line for line in lines if line)
-
-import xmltodict
-
-r = requests.get("https://www.finn.no/feed/job/atom.xml?rows=200")
-xml = r.text
-raw = xmltodict.parse(xml)
-
-pages = []
-for info in raw['feed']['entry']:
-    url = info['link']['@href']
-    if 'https://www.finn.no/' in url:
-        pages.append({'text': extract_text_from(url), 'source': url})
-
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000)
-docs, metadatas = [], []
-for page in pages:
-    splits = text_splitter.split_text(page['text'])
-    docs.extend(splits)
-    metadatas.extend([{"source": page['source']}] * len(splits))
-    print(f"Split {page['source']} into {len(splits)} chunks")
-
-import faiss
-from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 import pickle
-
-store = FAISS.from_texts(docs, OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"]), metadatas=metadatas)
-with open("faiss_store.pkl", "wb") as f:
-    pickle.dump(store, f)
-
-
+from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
 
 st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
 st.title("🦜 LangChain: Søk med chat.")
 
+import pinecone
+from langchain.vectorstores import Pinecone
+import os
 
-def configure_retriever(vector_store_path):
-    with open(vector_store_path, "rb") as f:
-        store = pickle.load(f)
-    retriever = store.as_retriever()
+embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
 
-    return retriever
+# initialize pinecone
+pinecone.init(
+    #api_key=os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
+    #environment=os.getenv("PINECONE_ENV_FINN"),  # next to api key in console
 
-retriever = configure_retriever("faiss_store.pkl")
+    api_key=st.secrets["PINECONE_API_FINN"], #os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
+    environment = st.secrets["PINECONE_ENV_FINN"]#os.getenv("PINECONE_ENV_FINN"),  # next to api key in console
+)
+
+index_name = "finn-demo-app"
+embedding = OpenAIEmbeddings()
+vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embedding)
+retriever = vectorstore.as_retriever()
 
 tool = create_retriever_tool(
     retriever, 
-    "search_finn",
+    "search_finn_embeddings",
     "Søk etter relevante stillinger på finn.no."
 )
-tools = [tool]
 
 msgs = StreamlitChatMessageHistory()
 memory = ConversationBufferMemory(
