@@ -26,8 +26,7 @@ pinecone.init(
 )
 
 index_name = "finn-demo-app"
-embedding = OpenAIEmbeddings()
-vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embedding)
+vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embeddings)
 retriever = vectorstore.as_retriever()
 
 tool = create_retriever_tool(
