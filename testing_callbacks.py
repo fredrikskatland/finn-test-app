@@ -2,25 +2,21 @@ from langchain.callbacks import StreamlitCallbackHandler
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.chat_message_histories import StreamlitChatMessageHistory
-import streamlit as st
 from langchain.embeddings import OpenAIEmbeddings
-import pickle
 from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
-
-st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
-st.title("🦜 LangChain: Søk på Finn med chat.")
-
-import pinecone
 from langchain.vectorstores import Pinecone
+
+
+import pickle
+import streamlit as st
+import pinecone
 import os
+
 
 embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
 
 # initialize pinecone
 pinecone.init(
-    #api_key=os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
-    #environment=os.getenv("PINECONE_ENV_FINN"),  # next to api key in console
-
     api_key=st.secrets["PINECONE_API_FINN"], #os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
     environment = st.secrets["PINECONE_ENV_FINN"]#os.getenv("PINECONE_ENV_FINN"),  # next to api key in console
 )
@@ -39,6 +35,11 @@ msgs = StreamlitChatMessageHistory()
 memory = ConversationBufferMemory(
     chat_memory=msgs, return_messages=True, memory_key="chat_history", output_key="output"
 )
+
+st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
+st.title("🦜 LangChain: Søk på Finn med chat.")
+
+
 if len(msgs.messages) == 0 or st.sidebar.button("Reset chat history"):
     msgs.clear()
     msgs.add_ai_message("Her kan du søke etter stillinger på finn.no.")
@@ -56,7 +57,7 @@ for idx, msg in enumerate(msgs.messages):
                 st.write(f"**{step[1]}**")
         st.write(msg.content)
 
-if prompt := st.chat_input(placeholder="Jeg leter etterlederstillinger innen bank og finans."):
+if prompt := st.chat_input(placeholder="Jeg leter etter lederstillinger innen bank og finans."):
     st.chat_message("user").write(prompt)
 
 
