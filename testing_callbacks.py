@@ -67,8 +67,8 @@ if prompt := st.chat_input(placeholder="Jeg leter etter lederstillinger innen ba
     tools =[
         retriever_tool,
     ]
-    #agent = create_conversational_retrieval_agent(llm, tools, verbose=True)
-    agent = initialize_agent(tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=True, handle_parsing_errors="Check your output and make sure it conforms!", memory=memory)
+    agent = create_conversational_retrieval_agent(llm, tools, verbose=True)
+    #agent = initialize_agent(tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=True, handle_parsing_errors="Check your output and make sure it conforms!", memory=memory)
     with st.chat_message("assistant"):
         st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
         response = agent(prompt, callbacks=[st_cb])
