@@ -63,7 +63,7 @@ if prompt := st.chat_input(placeholder="Jeg leter etter lederstillinger innen ba
     st.chat_message("user").write(prompt)
 
 
-    llm = ChatOpenAI(temperature = 0, openai_api_key=st.secrets["openai_api_key"])
+    llm = ChatOpenAI(temperature = 0, openai_api_key=st.secrets["openai_api_key"], streaming = True)
     tools =[
         retriever_tool,
     ]
