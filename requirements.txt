@@ -6,3 +6,4 @@ tiktoken==0.3.3
 xmltodict==0.13.0
 bs4
 pinecone-client
+git+https://github.com/tomquirk/linkedin-api.git
