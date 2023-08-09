@@ -9,8 +9,6 @@ from langchain.agents import AgentType, initialize_agent
 
 from langchain.tools import tool, Tool
 
-from linkedin_api import Linkedin
-
 
 import pickle
 import streamlit as st
