@@ -1,76 +1,123 @@
-from langchain.callbacks import StreamlitCallbackHandler
-from langchain.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
-from langchain.memory.chat_message_histories import StreamlitChatMessageHistory
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.agents.agent_toolkits import create_retriever_tool, create_conversational_retrieval_agent
-from langchain.vectorstores import Pinecone
-from langchain.agents import AgentType, initialize_agent
-
-from langchain.tools import tool, Tool
-
-
-import pickle
 import streamlit as st
+
+from langchain.document_loaders import RecursiveUrlLoader
+from langchain.document_transformers import Html2TextTransformer
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores.faiss import FAISS
+from langchain.callbacks import StreamlitCallbackHandler
+from langchain.agents import OpenAIFunctionsAgent, AgentExecutor
+from langchain.agents.agent_toolkits import create_retriever_tool
+from langchain.agents.openai_functions_agent.agent_token_buffer_memory import (
+    AgentTokenBufferMemory,
+)
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, AIMessage, HumanMessage
+from langchain.prompts import MessagesPlaceholder
+from langsmith import Client
+
 import pinecone
+from langchain.vectorstores import Pinecone
 import os
 
-embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
+client = Client()
 
-# initialize pinecone
-pinecone.init(
-    api_key=st.secrets["PINECONE_API_FINN"], #os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
-    environment = st.secrets["PINECONE_ENV_FINN"]#os.getenv("PINECONE_ENV_FINN"),  # next to api key in console
+st.set_page_config(
+    page_title="ChatLangChain",
+    page_icon="🦜",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-index_name = "finn-demo-app"
-vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embeddings)
-retriever = vectorstore.as_retriever()
+"# Chat🦜🔗"
 
-retriever_tool = create_retriever_tool(
-    retriever, 
-    "search_finn_embeddings",
-    "Søk etter relevante stillinger på finn.no."
+local = False
+
+
+
+@st.cache_resource(ttl="1h")
+def configure_retriever():
+    if local:
+        pinecone.init(
+            api_key=os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
+            environment = os.getenv("PINECONE_ENV_FINN")  # next to api key in console
+        )
+        embeddings = OpenAIEmbeddings() 
+    else:
+        pinecone.init(
+            api_key=st.secrets["PINECONE_API_FINN"], 
+            environment = st.secrets["PINECONE_ENV_FINN"]
+        )
+        embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
+
+    index_name = "finn-demo-app"
+    vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embeddings)
+    retriever = vectorstore.as_retriever()
+
+    return retriever
+
+
+
+
+tool = create_retriever_tool(
+    configure_retriever(),
+    "search_finn_adds",
+    "Searches and returns job adds from Finn.no. Finn.no is the leading online marketplace in Norway, everything from job ads to property and cars. You have access to a large selection of ads/listings, so you should use this tool when asked about jobs and positions.",
 )
+tools = [tool]
 
-msgs = StreamlitChatMessageHistory()
-memory = ConversationBufferMemory(
-    chat_memory=msgs, return_messages=True, memory_key="chat_history", output_key="output"
+if local:
+    llm = ChatOpenAI(temperature=0, streaming=True, model="gpt-4", )
+else:
+    llm = ChatOpenAI(temperature=0, streaming=True, model="gpt-4", openai_api_key=st.secrets["openai_api_key"])
+
+message = SystemMessage(
+    content=(
+        "You are a helpful chatbot who is tasked with answering questions about job ads. "
+        "Unless otherwise explicitly stated, it is probably fair to assume that questions are about job ads. "
+        "If there is any ambiguity, you probably assume they are about that."
+    )
 )
+prompt = OpenAIFunctionsAgent.create_prompt(
+    system_message=message,
+    extra_prompt_messages=[MessagesPlaceholder(variable_name="history")],
+)
+agent = OpenAIFunctionsAgent(llm=llm, tools=tools, prompt=prompt)
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=tools,
+    verbose=True,
+    return_intermediate_steps=True,
+)
+memory = AgentTokenBufferMemory(llm=llm)
+starter_message = "Ask me about open positions!"
+if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
+    st.session_state["messages"] = [AIMessage(content=starter_message)]
 
-st.set_page_config(page_title="Jobbannonser: ", page_icon="🦜")
-st.title("🦜 LangChain: Søk på Finn med chat.")
+
+def send_feedback(run_id, score):
+    client.create_feedback(run_id, "user_score", score=score)
 
 
-if len(msgs.messages) == 0 or st.sidebar.button("Reset chat history"):
-    msgs.clear()
-    msgs.add_ai_message("Her kan du søke etter stillinger på finn.no.")
-    st.session_state.steps = {}
+for msg in st.session_state.messages:
+    if isinstance(msg, AIMessage):
+        st.chat_message("assistant").write(msg.content)
+    elif isinstance(msg, HumanMessage):
+        st.chat_message("user").write(msg.content)
+    memory.chat_memory.add_message(msg)
 
-avatars = {"human": "user", "ai": "assistant"}
-for idx, msg in enumerate(msgs.messages):
-    with st.chat_message(avatars[msg.type]):
-        # Render intermediate steps if any were saved
-        for step in st.session_state.steps.get(str(idx), []):
-            if step[0].tool == "_Exception":
-                continue
-            with st.expander(f"✅ **{step[0].tool}**: {step[0].tool_input}"):
-                st.write(step[0].log)
-                st.write(f"**{step[1]}**")
-        st.write(msg.content)
 
-if prompt := st.chat_input(placeholder="Jeg leter etter lederstillinger innen bank og finans."):
+if prompt := st.chat_input(placeholder=starter_message):
     st.chat_message("user").write(prompt)
-
-
-    llm = ChatOpenAI(temperature = 0, openai_api_key=st.secrets["openai_api_key"], streaming = True)
-    tools =[
-        retriever_tool,
-    ]
-    agent = create_conversational_retrieval_agent(llm, tools, verbose=True)
-    #agent = initialize_agent(tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=True, handle_parsing_errors="Check your output and make sure it conforms!", memory=memory)
     with st.chat_message("assistant"):
-        st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
-        response = agent(prompt, callbacks=[st_cb])
+        st_callback = StreamlitCallbackHandler(st.container())
+        response = agent_executor(
+            {"input": prompt, "history": st.session_state.messages},
+            callbacks=[st_callback],
+            include_run_info=True,
+        )
+        st.session_state.messages.append(AIMessage(content=response["output"]))
         st.write(response["output"])
-        st.session_state.steps[str(len(msgs.messages) - 1)] = response["intermediate_steps"]
+        memory.save_context({"input": prompt}, response)
+        st.session_state["messages"] = memory.buffer
+        run_id = response["__run"].run_id
